@@ -1,7 +1,7 @@
 // src/App.jsx
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 /**
@@ -142,6 +142,10 @@ export default function App() {
 
   const onDragLeaveTextarea = () => setIsDragging(false);
 
+  // DROP-IN: vervang exportPdf door deze versie
+  // => bouwt DOM-pagina's op basis van .lineGroup (niet .rowBlock)
+  // => dus exact dezelfde “ruimte tussen lijnen, geen ruimte binnen set” als uw UI
+
   const exportPdf = async () => {
     const src = printableRef.current;
     if (!src) return;
@@ -182,12 +186,12 @@ export default function App() {
 
         const fake = document.createElement("div");
         fake.className = "pdf-field";
-        fake.textContent = value; // empty => empty (CSS keeps height)
+        fake.textContent = value;
 
         el.replaceWith(fake);
       });
 
-      // Force reflow after replacements
+      // force reflow
       clone.getBoundingClientRect();
 
       // --- 3) Setup PDF + compute max page height in PX (based on clone width) ---
@@ -198,15 +202,15 @@ export default function App() {
       const printableWidthMm = pageWidthMm - marginLeftMm - marginRightMm;
       const printableHeightMm = pageHeightMm - marginTopMm - marginBottomMm;
 
-      const pageWidthPx = clone.getBoundingClientRect().width; // the DOM width we will render
+      const pageWidthPx = clone.getBoundingClientRect().width;
       const maxPageHeightPx = Math.floor(
         printableHeightMm * (pageWidthPx / printableWidthMm),
       );
 
-      // --- 4) Build DOM pages (no cutting rowBlocks) ---
-      const blocks = Array.from(clone.querySelectorAll(".rowBlock"));
+      // --- 4) Build DOM pages based on .lineGroup (UI-accurate spacing) ---
+      const lineGroups = Array.from(clone.querySelectorAll(".lineGroup"));
 
-      // We'll move blocks into pages, so make a clean container
+      // wipe clone content, re-append in pages
       clone.innerHTML = "";
 
       const pages = [];
@@ -220,25 +224,25 @@ export default function App() {
 
       let page = makePage();
 
-      for (const block of blocks) {
-        page.appendChild(block);
+      for (const group of lineGroups) {
+        page.appendChild(group);
 
-        // Important: add a tiny bottom breathing room so thick borders don’t get clipped
-        page.style.paddingBottom = "12px";
-
+        // If it overflows, move to next page (but keep the gap logic from CSS)
         const h = page.scrollHeight;
+
         if (h > maxPageHeightPx && page.childElementCount > 1) {
-          // too tall: move this block to a new page
-          page.removeChild(block);
+          page.removeChild(group);
           page = makePage();
-          page.appendChild(block);
-          page.style.paddingBottom = "12px";
+          page.appendChild(group);
         }
       }
 
-      // --- 5) Render each page separately => zero giant whitespace issues ---
+      // --- 5) Render each page separately (no whitespace/cut issues) ---
       for (let i = 0; i < pages.length; i++) {
         const pageEl = pages[i];
+
+        // small extra bottom padding so the last row never clips
+        pageEl.style.paddingBottom = "12px";
 
         const canvas = await html2canvas(pageEl, {
           scale: SCALE,
@@ -315,7 +319,7 @@ export default function App() {
 
     return { widths, lines };
   };
-
+  // *****************************************************
   return (
     <div className="app">
       <header className="header">
@@ -407,7 +411,10 @@ export default function App() {
                 return (
                   <div className="rowBlock" key={`row-${rowIndex}`}>
                     {lines.map((colIdxs, lineIndex) => (
-                      <React.Fragment key={`line-${rowIndex}-${lineIndex}`}>
+                      <div
+                        className="lineGroup"
+                        key={`line-${rowIndex}-${lineIndex}`}
+                      >
                         {/* INPUT LINE: CHORDS */}
                         {showChords && (
                           <div className="rowNoScroll">
@@ -577,7 +584,7 @@ export default function App() {
                             );
                           })}
                         </div>
-                      </React.Fragment>
+                      </div>
                     ))}
                   </div>
                 );

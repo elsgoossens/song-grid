@@ -195,10 +195,18 @@ body,
   gap: 10px;
 }
 
+/* SECTION: ROW_BLOCK_SPACING */
 .rowBlock {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px; /* ruimte tussen twee lijnen/sets */
+}
+
+/* SECTION: LINE_GROUP (no vertical gap inside a set) */
+.lineGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0; /* géén ruimte tussen chords/rhythm/notes/word */
 }
 
 /* SECTION: NO_SCROLL_ROWS */
@@ -348,4 +356,43 @@ body,
 /* Zorg dat de “container” cell zelf geen padding toevoegt */
 .pdf-export .inputCell {
   padding: 0 !important;
+}
+
+/* SECTION: GRID_SPACING_RULES */
+.rowBlock {
+  gap: 0 !important; /* geen extra ruimte binnen rowBlock */
+}
+
+.rowNoScroll {
+  margin: 0 !important; /* geen marges per rij */
+  padding: 0 !important;
+}
+
+/* als jouw .lineGroup bestaat: dit is de ENIGE plek waar verticale ruimte mag zitten */
+.lineGroup {
+  margin: 0 0 12px 0 !important; /* ruimte tussen 2 lijnen */
+}
+
+/* PDF: exact dezelfde spacing */
+.pdf-export .rowBlock {
+  gap: 0 !important;
+}
+
+.pdf-export .rowNoScroll {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.pdf-export .lineGroup {
+  margin: 0 0 12px 0 !important;
+}
+
+/* SECTION: CELL_VERTICAL_GAPS_OFF */
+.cell,
+.wordCell,
+.inputCell,
+.pdf-export .cell,
+.pdf-export .wordCell,
+.pdf-export .inputCell {
+  margin: 0 !important;
 }
