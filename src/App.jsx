@@ -21,11 +21,8 @@ function measureTextPx(text, font) {
     measureTextPx._c || (measureTextPx._c = document.createElement("canvas"));
   const ctx = canvas.getContext("2d");
   ctx.font = font;
-  return Math.ceil(ctx.measureText(text).width);
-}
-
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+  const s = String(text ?? "");
+  return Math.ceil(ctx.measureText(s).width) + 4;
 }
 
 /**
@@ -52,7 +49,6 @@ function packColumns(widths, maxRowPx) {
       continue;
     }
 
-    // start new line
     lines.push(current);
     current = [i];
     currentW = w;
@@ -64,9 +60,19 @@ function packColumns(widths, maxRowPx) {
 
 export default function App() {
   const [rawText, setRawText] = useState("");
-  const [inputValues, setInputValues] = useState({}); // `${row}:${col}` -> string
-  const [borders, setBorders] = useState({}); // `${row}:${col}` -> {left,right}
+
+  // inputValues key: `${row}:${col}:${type}` where type: chord|rhythm|note
+  const [inputValues, setInputValues] = useState({});
+
+  // borders key: `${row}:${col}` -> {left,right}
+  const [borders, setBorders] = useState({});
+
   const [isDragging, setIsDragging] = useState(false);
+
+  // toggles (defaults: chords ON, rest OFF)
+  const [showChords, setShowChords] = useState(true);
+  const [showRhythm, setShowRhythm] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
 
   const printableRef = useRef(null);
   const previewRef = useRef(null);
@@ -109,8 +115,16 @@ export default function App() {
     else toggleBorder(rowIndex, colIndex, "right");
   };
 
-  const setInputValue = (rowIndex, colIndex, value) => {
-    const key = `${rowIndex}:${colIndex}`;
+  const getInputKey = (rowIndex, colIndex, type) =>
+    `${rowIndex}:${colIndex}:${type}`;
+
+  const getInputValue = (rowIndex, colIndex, type) => {
+    const key = getInputKey(rowIndex, colIndex, type);
+    return inputValues[key] || "";
+  };
+
+  const setInputValue = (rowIndex, colIndex, type, value) => {
+    const key = getInputKey(rowIndex, colIndex, type);
     setInputValues((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -128,115 +142,120 @@ export default function App() {
 
   const onDragLeaveTextarea = () => setIsDragging(false);
 
-  // Fix: op ELKE PDF-pagina een vaste top/bottom margin (witruimte),
-  // zodat de content nooit “tegen de rand plakt”.
-
   const exportPdf = async () => {
-    const el = printableRef.current;
-    if (!el) return;
+    const src = printableRef.current;
+    if (!src) return;
 
-    el.classList.add("pdf-export");
+    const SCALE = 2;
+
+    // PDF page + margins (mm)
+    const marginTopMm = 12;
+    const marginBottomMm = 12;
+    const marginLeftMm = 10;
+    const marginRightMm = 10;
+
+    // --- 1) Clone offscreen ---
+    const clone = src.cloneNode(true);
+    clone.classList.add("pdf-export");
+
+    const holder = document.createElement("div");
+    holder.style.position = "fixed";
+    holder.style.left = "-10000px";
+    holder.style.top = "0";
+    holder.style.width = `${Math.ceil(src.getBoundingClientRect().width)}px`;
+    holder.style.background = "#fff";
+    holder.style.zIndex = "-1";
+    holder.style.pointerEvents = "none";
+
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
 
     try {
-      const SCALE = 2;
+      // settle layout
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
 
-      const fullCanvas = await html2canvas(el, {
-        scale: SCALE,
-        useCORS: true,
-        backgroundColor: "#ffffff",
+      // --- 2) Replace inputs/textareas with plain divs (no placeholders in PDF) ---
+      const formEls = clone.querySelectorAll("input, textarea");
+      formEls.forEach((el) => {
+        const value = (el.value ?? "").toString();
+
+        const fake = document.createElement("div");
+        fake.className = "pdf-field";
+        fake.textContent = value; // empty => empty (CSS keeps height)
+
+        el.replaceWith(fake);
       });
 
+      // Force reflow after replacements
+      clone.getBoundingClientRect();
+
+      // --- 3) Setup PDF + compute max page height in PX (based on clone width) ---
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidthMm = pdf.internal.pageSize.getWidth();
       const pageHeightMm = pdf.internal.pageSize.getHeight();
 
-      // --- Margins (in mm) ---
-      const marginTopMm = 12;
-      const marginBottomMm = 12;
-      const marginLeftMm = 10;
-      const marginRightMm = 10;
-
       const printableWidthMm = pageWidthMm - marginLeftMm - marginRightMm;
       const printableHeightMm = pageHeightMm - marginTopMm - marginBottomMm;
 
-      const pxPerMm = fullCanvas.width / printableWidthMm; // map canvas width to printable width
-      const pageHeightPx = Math.floor(printableHeightMm * pxPerMm);
+      const pageWidthPx = clone.getBoundingClientRect().width; // the DOM width we will render
+      const maxPageHeightPx = Math.floor(
+        printableHeightMm * (pageWidthPx / printableWidthMm),
+      );
 
-      // Measure rowBlocks in px (scaled)
-      const containerRect = el.getBoundingClientRect();
-      const blocks = Array.from(el.querySelectorAll(".rowBlock"));
+      // --- 4) Build DOM pages (no cutting rowBlocks) ---
+      const blocks = Array.from(clone.querySelectorAll(".rowBlock"));
 
-      const blockRangesPx = blocks
-        .map((b) => {
-          const r = b.getBoundingClientRect();
-          const top = Math.floor((r.top - containerRect.top) * SCALE);
-          const bottom = Math.floor((r.bottom - containerRect.top) * SCALE);
-          return { top, bottom, h: bottom - top };
-        })
-        .filter((x) => x.bottom > x.top)
-        .sort((a, b) => a.top - b.top);
+      // We'll move blocks into pages, so make a clean container
+      clone.innerHTML = "";
 
-      // Build pages: if cut would happen, break BEFORE that block
       const pages = [];
-      let pageStart = 0;
+      const makePage = () => {
+        const page = document.createElement("div");
+        page.className = "pdf-page";
+        clone.appendChild(page);
+        pages.push(page);
+        return page;
+      };
 
-      while (pageStart < fullCanvas.height) {
-        const pageEndIdeal = Math.min(
-          pageStart + pageHeightPx,
-          fullCanvas.height,
-        );
-        let breakAt = pageEndIdeal;
+      let page = makePage();
 
-        const cutting = blockRangesPx.find(
-          (br) => br.top < pageEndIdeal && br.bottom > pageEndIdeal,
-        );
+      for (const block of blocks) {
+        page.appendChild(block);
 
-        if (cutting) {
-          if (cutting.h <= pageHeightPx) {
-            breakAt = cutting.top;
-            if (breakAt === pageStart) breakAt = pageEndIdeal; // safety
-          } else {
-            breakAt = pageEndIdeal; // unavoidable
-          }
-        } else {
-          const candidates = blockRangesPx
-            .map((br) => br.top)
-            .filter((t) => t > pageStart && t < pageEndIdeal);
+        // Important: add a tiny bottom breathing room so thick borders don’t get clipped
+        page.style.paddingBottom = "12px";
 
-          if (candidates.length) breakAt = candidates[candidates.length - 1];
+        const h = page.scrollHeight;
+        if (h > maxPageHeightPx && page.childElementCount > 1) {
+          // too tall: move this block to a new page
+          page.removeChild(block);
+          page = makePage();
+          page.appendChild(block);
+          page.style.paddingBottom = "12px";
         }
-
-        if (breakAt <= pageStart) breakAt = pageEndIdeal;
-
-        pages.push({ y: pageStart, h: Math.max(1, breakAt - pageStart) });
-        pageStart = breakAt;
       }
 
-      // Render slices with margins
-      pages.forEach((p, idx) => {
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = fullCanvas.width;
-        pageCanvas.height = p.h;
+      // --- 5) Render each page separately => zero giant whitespace issues ---
+      for (let i = 0; i < pages.length; i++) {
+        const pageEl = pages[i];
 
-        const ctx = pageCanvas.getContext("2d");
-        ctx.drawImage(
-          fullCanvas,
-          0,
-          p.y,
-          fullCanvas.width,
-          p.h,
-          0,
-          0,
-          fullCanvas.width,
-          p.h,
-        );
+        const canvas = await html2canvas(pageEl, {
+          scale: SCALE,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: Math.ceil(pageWidthPx),
+          windowHeight: Math.ceil(pageEl.getBoundingClientRect().height),
+        });
 
-        const imgData = pageCanvas.toDataURL("image/png");
+        const imgData = canvas.toDataURL("image/png");
 
-        if (idx > 0) pdf.addPage();
+        if (i > 0) pdf.addPage();
 
         const imgWidthMm = printableWidthMm;
-        const imgHeightMm = (p.h * imgWidthMm) / fullCanvas.width;
+        const imgHeightMm = (canvas.height * imgWidthMm) / canvas.width;
 
         pdf.addImage(
           imgData,
@@ -246,27 +265,52 @@ export default function App() {
           imgWidthMm,
           imgHeightMm,
         );
-      });
+      }
 
       pdf.save("word-grid.pdf");
     } finally {
-      el.classList.remove("pdf-export");
+      holder.remove();
     }
   };
 
-  // --- Layout computation per row (no horizontal scroll) ---
-  // Rule: column width = max(150px, wordWidthPx + padding)
-  // Input cells MUST be exactly same width as corresponding word cell.
-  const getRowLayout = (words) => {
-    const minCol = 150;
-    const paddingPx = 16; // approx left+right padding in cells (keep in sync with CSS)
-    const font =
-      '600 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial';
+  // layout per row:
+  // column width = max(<mincol>px, word width, chord/rhythm/note typed width)
+  const getRowLayout = (words, rowIndex) => {
+    const minCol = 10;
+    const paddingPx = 16; // must match CSS padding L+R in cells/inputs
 
-    const widths = words.map((w) =>
-      Math.max(minCol, measureTextPx(w, font) + paddingPx),
-    );
-    const maxRowPx = Math.max(320, previewWidth - 24); // inside padding
+    const wordFont =
+      '600 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial';
+    const inputFont =
+      '400 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial';
+
+    const chordPH = showChords ? "Chord" : "";
+    const rhythmPH = showRhythm ? "Rhythm" : "";
+    const notePH = showNotes ? "Note" : "";
+
+    const widths = words.map((word, colIndex) => {
+      const chord = getInputValue(rowIndex, colIndex, "chord");
+      const rhythm = getInputValue(rowIndex, colIndex, "rhythm");
+      const note = getInputValue(rowIndex, colIndex, "note");
+
+      const wWord = measureTextPx(word || "", wordFont) + paddingPx;
+
+      const wChord = showChords
+        ? measureTextPx(chord || chordPH, inputFont) + paddingPx
+        : 0;
+
+      const wRhythm = showRhythm
+        ? measureTextPx(rhythm || rhythmPH, inputFont) + paddingPx
+        : 0;
+
+      const wNote = showNotes
+        ? measureTextPx(note || notePH, inputFont) + paddingPx
+        : 0;
+
+      return Math.max(minCol, wWord, wChord, wRhythm, wNote);
+    });
+
+    const maxRowPx = Math.max(320, previewWidth - 24);
     const lines = packColumns(widths, maxRowPx);
 
     return { widths, lines };
@@ -278,8 +322,8 @@ export default function App() {
         <div>
           <h1>Song Grid</h1>
           <p className="sub">
-            Drop tekst in de textarea → 1 woord per cel. <b>Click</b> toggelt{" "}
-            <b>RIGHT</b>, <b>Shift+Click</b> toggelt <b>LEFT</b>.
+            Songtekst wordt altijd getoond. <b>Click</b> toggelt <b>RECHTSE</b>{" "}
+            border, <b>Shift+Click</b> toggelt <b>LINKSE</b> border.
           </p>
         </div>
 
@@ -306,17 +350,47 @@ export default function App() {
           onDragLeave={onDragLeaveTextarea}
         />
         <div className="hint">
-          Tip: sleep tekst van eender waar hier binnen. Tekst hier aanpassen
-          past automatisch de grids aan.
+          Tip: sleep tekst van eender waar hier binnen. Tekst aanpassen past
+          automatisch de grids aan.
         </div>
       </section>
 
       <section className="panel" ref={previewRef}>
         <div className="panelHeader">
           <h2>Preview</h2>
+
           <div className="legend">
             <span className="pill">Click = RIGHT border</span>
             <span className="pill">Shift+Click = LEFT border</span>
+          </div>
+
+          <div className="toggles">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={showChords}
+                onChange={(e) => setShowChords(e.target.checked)}
+              />
+              Chords
+            </label>
+
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={showRhythm}
+                onChange={(e) => setShowRhythm(e.target.checked)}
+              />
+              Rhythm
+            </label>
+
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={showNotes}
+                onChange={(e) => setShowNotes(e.target.checked)}
+              />
+              Notes
+            </label>
           </div>
         </div>
 
@@ -328,13 +402,152 @@ export default function App() {
           ) : (
             <div className="grid">
               {rows.map((words, rowIndex) => {
-                const { widths, lines } = getRowLayout(words);
+                const { widths, lines } = getRowLayout(words, rowIndex);
 
                 return (
                   <div className="rowBlock" key={`row-${rowIndex}`}>
                     {lines.map((colIdxs, lineIndex) => (
                       <React.Fragment key={`line-${rowIndex}-${lineIndex}`}>
-                        {/* WORD LINE */}
+                        {/* INPUT LINE: CHORDS */}
+                        {showChords && (
+                          <div className="rowNoScroll">
+                            {colIdxs.map((colIndex) => {
+                              const b = getBorderState(rowIndex, colIndex);
+                              const cls = [
+                                "cell",
+                                "inputCell",
+                                "inputCellTop",
+                                b.left ? "bL" : "",
+                                b.right ? "bR" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ");
+
+                              const val = getInputValue(
+                                rowIndex,
+                                colIndex,
+                                "chord",
+                              );
+
+                              return (
+                                <div
+                                  key={`c-${rowIndex}-${colIndex}`}
+                                  className={cls}
+                                  style={{ width: `${widths[colIndex]}px` }}
+                                >
+                                  <input
+                                    title="Chord"
+                                    className="input"
+                                    value={val}
+                                    onChange={(e) =>
+                                      setInputValue(
+                                        rowIndex,
+                                        colIndex,
+                                        "chord",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="..."
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* INPUT LINE: RHYTHM */}
+                        {showRhythm && (
+                          <div className="rowNoScroll">
+                            {colIdxs.map((colIndex) => {
+                              const b = getBorderState(rowIndex, colIndex);
+                              const cls = [
+                                "cell",
+                                "inputCell",
+                                b.left ? "bL" : "",
+                                b.right ? "bR" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ");
+
+                              const val = getInputValue(
+                                rowIndex,
+                                colIndex,
+                                "rhythm",
+                              );
+
+                              return (
+                                <div
+                                  key={`r-${rowIndex}-${colIndex}`}
+                                  className={cls}
+                                  style={{ width: `${widths[colIndex]}px` }}
+                                >
+                                  <input
+                                    className="input"
+                                    value={val}
+                                    onChange={(e) =>
+                                      setInputValue(
+                                        rowIndex,
+                                        colIndex,
+                                        "rhythm",
+                                        e.target.value,
+                                      )
+                                    }
+                                    title="Rhythm"
+                                    placeholder="..."
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* INPUT LINE: NOTES */}
+                        {showNotes && (
+                          <div className="rowNoScroll">
+                            {colIdxs.map((colIndex) => {
+                              const b = getBorderState(rowIndex, colIndex);
+                              const cls = [
+                                "cell",
+                                "inputCell",
+                                b.left ? "bL" : "",
+                                b.right ? "bR" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ");
+
+                              const val = getInputValue(
+                                rowIndex,
+                                colIndex,
+                                "note",
+                              );
+
+                              return (
+                                <div
+                                  key={`n-${rowIndex}-${colIndex}`}
+                                  className={cls}
+                                  style={{ width: `${widths[colIndex]}px` }}
+                                >
+                                  <input
+                                    className="input"
+                                    value={val}
+                                    onChange={(e) =>
+                                      setInputValue(
+                                        rowIndex,
+                                        colIndex,
+                                        "note",
+                                        e.target.value,
+                                      )
+                                    }
+                                    title="Notes"
+                                    placeholder="..."
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* WORD LINE (always shown) */}
                         <div className="rowNoScroll">
                           {colIdxs.map((colIndex) => {
                             const word = words[colIndex];
@@ -361,45 +574,6 @@ export default function App() {
                               >
                                 {word}
                               </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* INPUT LINE (same widths as above) */}
-                        <div className="rowNoScroll">
-                          {colIdxs.map((colIndex) => {
-                            const b = getBorderState(rowIndex, colIndex);
-                            const cls = [
-                              "cell",
-                              "inputCell",
-                              b.left ? "bL" : "",
-                              b.right ? "bR" : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" ");
-
-                            const key = `${rowIndex}:${colIndex}`;
-                            const val = inputValues[key] || "";
-
-                            return (
-                              <div
-                                key={`i-${rowIndex}-${colIndex}`}
-                                className={cls}
-                                style={{ width: `${widths[colIndex]}px` }}
-                              >
-                                <input
-                                  className="input"
-                                  value={val}
-                                  onChange={(e) =>
-                                    setInputValue(
-                                      rowIndex,
-                                      colIndex,
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="..."
-                                />
-                              </div>
                             );
                           })}
                         </div>
