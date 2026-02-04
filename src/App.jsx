@@ -3,6 +3,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import { formatRhythm } from "./utils/formatRhythm.js";
 
 /**
  * Split text into rows; each line -> row; each row -> words (whitespace split)
@@ -74,6 +75,13 @@ export default function App() {
   const [showRhythm, setShowRhythm] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
 
+  // editing state (only used for rhythm “pretty view”)
+  const [editingKey, setEditingKey] = useState(null); // e.g. "3:5:rhythm"
+  const makeEditKey = (rowIndex, colIndex, type) =>
+    `${rowIndex}:${colIndex}:${type}`;
+  const isEditing = (rowIndex, colIndex, type) =>
+    editingKey === makeEditKey(rowIndex, colIndex, type);
+
   const printableRef = useRef(null);
   const previewRef = useRef(null);
 
@@ -142,10 +150,7 @@ export default function App() {
 
   const onDragLeaveTextarea = () => setIsDragging(false);
 
-  // DROP-IN: vervang exportPdf door deze versie
-  // => bouwt DOM-pagina's op basis van .lineGroup (niet .rowBlock)
-  // => dus exact dezelfde “ruimte tussen lijnen, geen ruimte binnen set” als uw UI
-
+  // PDF export: paginate by .lineGroup so spacing matches UI
   const exportPdf = async () => {
     const src = printableRef.current;
     if (!src) return;
@@ -175,14 +180,17 @@ export default function App() {
     document.body.appendChild(holder);
 
     try {
-      // settle layout
       await new Promise((r) => requestAnimationFrame(r));
       await new Promise((r) => requestAnimationFrame(r));
 
       // --- 2) Replace inputs/textareas with plain divs (no placeholders in PDF) ---
       const formEls = clone.querySelectorAll("input, textarea");
       formEls.forEach((el) => {
-        const value = (el.value ?? "").toString();
+        const raw = (el.value ?? "").toString();
+        const type = el.getAttribute("data-type") || "";
+
+        // show formatted rhythm in PDF
+        const value = type === "rhythm" ? formatRhythm(raw) : raw;
 
         const fake = document.createElement("div");
         fake.className = "pdf-field";
@@ -191,7 +199,6 @@ export default function App() {
         el.replaceWith(fake);
       });
 
-      // force reflow
       clone.getBoundingClientRect();
 
       // --- 3) Setup PDF + compute max page height in PX (based on clone width) ---
@@ -207,10 +214,9 @@ export default function App() {
         printableHeightMm * (pageWidthPx / printableWidthMm),
       );
 
-      // --- 4) Build DOM pages based on .lineGroup (UI-accurate spacing) ---
+      // --- 4) Build DOM pages based on .lineGroup ---
       const lineGroups = Array.from(clone.querySelectorAll(".lineGroup"));
 
-      // wipe clone content, re-append in pages
       clone.innerHTML = "";
 
       const pages = [];
@@ -227,9 +233,7 @@ export default function App() {
       for (const group of lineGroups) {
         page.appendChild(group);
 
-        // If it overflows, move to next page (but keep the gap logic from CSS)
         const h = page.scrollHeight;
-
         if (h > maxPageHeightPx && page.childElementCount > 1) {
           page.removeChild(group);
           page = makePage();
@@ -237,11 +241,11 @@ export default function App() {
         }
       }
 
-      // --- 5) Render each page separately (no whitespace/cut issues) ---
+      // --- 5) Render each page separately ---
       for (let i = 0; i < pages.length; i++) {
         const pageEl = pages[i];
 
-        // small extra bottom padding so the last row never clips
+        // breathing room to avoid bottom clipping
         pageEl.style.paddingBottom = "12px";
 
         const canvas = await html2canvas(pageEl, {
@@ -278,7 +282,8 @@ export default function App() {
   };
 
   // layout per row:
-  // column width = max(<mincol>px, word width, chord/rhythm/note typed width)
+  // column width = max(minCol, word width, chord/rhythm/note content width)
+  // NOTE: for rhythm we also account for the formatted display so it never clips in view mode.
   const getRowLayout = (words, rowIndex) => {
     const minCol = 10;
     const paddingPx = 16; // must match CSS padding L+R in cells/inputs
@@ -294,7 +299,8 @@ export default function App() {
 
     const widths = words.map((word, colIndex) => {
       const chord = getInputValue(rowIndex, colIndex, "chord");
-      const rhythm = getInputValue(rowIndex, colIndex, "rhythm");
+      const rhythmRaw = getInputValue(rowIndex, colIndex, "rhythm");
+      const rhythmPretty = formatRhythm(rhythmRaw);
       const note = getInputValue(rowIndex, colIndex, "note");
 
       const wWord = measureTextPx(word || "", wordFont) + paddingPx;
@@ -304,7 +310,10 @@ export default function App() {
         : 0;
 
       const wRhythm = showRhythm
-        ? measureTextPx(rhythm || rhythmPH, inputFont) + paddingPx
+        ? Math.max(
+            measureTextPx(rhythmRaw || rhythmPH, inputFont) + paddingPx,
+            measureTextPx(rhythmPretty || rhythmPH, inputFont) + paddingPx,
+          )
         : 0;
 
       const wNote = showNotes
@@ -319,7 +328,7 @@ export default function App() {
 
     return { widths, lines };
   };
-  // *****************************************************
+
   return (
     <div className="app">
       <header className="header">
@@ -356,6 +365,14 @@ export default function App() {
         <div className="hint">
           Tip: sleep tekst van eender waar hier binnen. Tekst aanpassen past
           automatisch de grids aan.
+        </div>
+        <div className="hint">
+          Typing rhythms (EXPERIMENTAL) (type number it is replaced when you
+          leave the typing field): 1 = 𝅝 = whole note 2 = 𝅗𝅥 = half note 4 = ♩ =
+          quarter note 8 = ♪ = eighth note 16 = 𝅘𝅥𝅯 = sixteenth note 32 = 𝅘𝅥𝅰 =
+          thirty-second note 1 = 𝄻 = whole rest 2 = 𝄼 = half rest 4 = 𝄽 =
+          quarter rest 8 = 𝄾 = eighth rest 16 = 𝄿 = sixteenth rest Type multiple
+          notes with spaces between or with | between
         </div>
       </section>
 
@@ -443,6 +460,7 @@ export default function App() {
                                   style={{ width: `${widths[colIndex]}px` }}
                                 >
                                   <input
+                                    data-type="chord"
                                     title="Chord"
                                     className="input"
                                     value={val}
@@ -462,7 +480,7 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* INPUT LINE: RHYTHM */}
+                        {/* INPUT LINE: RHYTHM (pretty when not editing) */}
                         {showRhythm && (
                           <div className="rowNoScroll">
                             {colIdxs.map((colIndex) => {
@@ -476,11 +494,19 @@ export default function App() {
                                 .filter(Boolean)
                                 .join(" ");
 
-                              const val = getInputValue(
+                              const raw = getInputValue(
                                 rowIndex,
                                 colIndex,
                                 "rhythm",
                               );
+                              const editing = isEditing(
+                                rowIndex,
+                                colIndex,
+                                "rhythm",
+                              );
+                              const displayValue = editing
+                                ? raw
+                                : formatRhythm(raw);
 
                               return (
                                 <div
@@ -489,16 +515,42 @@ export default function App() {
                                   style={{ width: `${widths[colIndex]}px` }}
                                 >
                                   <input
+                                    data-type="rhythm"
                                     className="input"
-                                    value={val}
-                                    onChange={(e) =>
+                                    value={displayValue}
+                                    onFocus={(e) => {
+                                      setEditingKey(
+                                        makeEditKey(
+                                          rowIndex,
+                                          colIndex,
+                                          "rhythm",
+                                        ),
+                                      );
+
+                                      requestAnimationFrame(() => {
+                                        try {
+                                          const el = e.target;
+                                          const len = el.value.length;
+                                          el.setSelectionRange(len, len);
+                                        } catch {
+                                          console.log("error");
+                                        }
+                                      });
+                                    }}
+                                    onBlur={() => setEditingKey(null)}
+                                    onChange={(e) => {
+                                      // only store raw while editing
+                                      if (
+                                        !isEditing(rowIndex, colIndex, "rhythm")
+                                      )
+                                        return;
                                       setInputValue(
                                         rowIndex,
                                         colIndex,
                                         "rhythm",
                                         e.target.value,
-                                      )
-                                    }
+                                      );
+                                    }}
                                     title="Rhythm"
                                     placeholder="..."
                                   />
@@ -535,6 +587,7 @@ export default function App() {
                                   style={{ width: `${widths[colIndex]}px` }}
                                 >
                                   <input
+                                    data-type="note"
                                     className="input"
                                     value={val}
                                     onChange={(e) =>
