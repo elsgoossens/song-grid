@@ -1,0 +1,296 @@
+/* src/App.css */
+
+/* SECTION: THEME_TOKENS */
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+
+  --text: #0b1220;
+  --text-muted: #4b5563;
+
+  --border: #d1d5db;
+  --border-strong: #111827;
+
+  --accent: #2563eb;
+  --accent-2: #06b6d4;
+
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --radius: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0f19;
+    --surface: #111827;
+    --surface-2: #0f172a;
+
+    --text: #e5e7eb;
+    --text-muted: #9ca3af;
+
+    --border: #334155;
+    --border-strong: #e5e7eb;
+
+    --accent: #60a5fa;
+    --accent-2: #22d3ee;
+
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* SECTION: APP_SHELL */
+.app {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 16px 40px;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Arial,
+    "Noto Sans",
+    "Liberation Sans",
+    sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* SECTION: HEADER */
+.header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+.sub {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* SECTION: BUTTONS */
+.btn {
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+
+/* SECTION: PANELS */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.label {
+  display: block;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.hint {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* SECTION: TEXTAREA */
+.textarea {
+  width: 100%;
+  min-height: 140px;
+  border-radius: 14px;
+  border: 2px dashed var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.35;
+  outline: none;
+  resize: vertical;
+}
+
+.textarea:focus {
+  border-color: var(--accent);
+}
+
+.textarea.dragging {
+  border-color: var(--accent-2);
+}
+
+/* SECTION: LEGEND */
+.legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pill {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* SECTION: PRINTABLE */
+.printableWrap {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+/* SECTION: GRID */
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rowBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* SECTION: NO_SCROLL_ROWS */
+.rowNoScroll {
+  display: flex;
+  flex-wrap: wrap; /* wrap if needed */
+  gap: 0;
+}
+
+/* SECTION: CELLS */
+.cell {
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.wordCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inputCell {
+  background: var(--surface-2);
+}
+
+.input {
+  width: 100%;
+  border: 0;
+  padding: 10px 8px;
+  font-size: 14px;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  box-sizing: border-box;
+
+  /* do not expand width */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SECTION: BORDERS_TOGGLES */
+.bL {
+  border-left: 3px solid var(--accent) !important;
+}
+
+.bR {
+  border-right: 3px solid var(--accent) !important;
+}
+
+/* SECTION: PDF_PAGEBREAK_HINTS */
+@media print {
+  .rowBlock {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+/* SECTION: PDF_FORCE_BLACK_ON_WHITE */
+.pdf-export {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+.pdf-export .panel,
+.pdf-export .printableWrap,
+.pdf-export .rowBlock,
+.pdf-export .rowNoScroll,
+.pdf-export .cell,
+.pdf-export .wordCell,
+.pdf-export .inputCell {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  box-shadow: none !important;
+}
+
+.pdf-export .pill,
+.pdf-export .legend,
+.pdf-export .hint,
+.pdf-export .sub {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+
+.pdf-export .input {
+  color: #000000 !important;
+}
+
+.pdf-export .bL {
+  border-left: 3px solid #000000 !important;
+}
+
+.pdf-export .bR {
+  border-right: 3px solid #000000 !important;
+}
