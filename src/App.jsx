@@ -191,7 +191,6 @@ export default function App() {
 
         // show formatted rhythm in PDF
         const value = type === "rhythm" ? formatRhythm(raw) : raw;
-
         const fake = document.createElement("div");
         fake.className = "pdf-field";
         fake.textContent = value;
@@ -334,10 +333,7 @@ export default function App() {
       <header className="header">
         <div>
           <h1>Song Grid</h1>
-          <p className="sub">
-            Songtekst wordt altijd getoond. <b>Click</b> toggelt <b>RECHTSE</b>{" "}
-            border, <b>Shift+Click</b> toggelt <b>LINKSE</b> border.
-          </p>
+          <p className="sub">Songtekst wordt altijd getoond.</p>
         </div>
 
         <button
@@ -354,7 +350,7 @@ export default function App() {
         <textarea
           className={`textarea ${isDragging ? "dragging" : ""}`}
           placeholder={
-            "Drop hier tekst of plak/typ...\n\nNieuwe lijn = nieuwe rij in de tabel."
+            "Drop hier tekst of plak/typ...\n\nNieuwe lijn = nieuwe rij in de tabel.\nBlanco text cel nodig: typ: . met spatie voor en achter"
           }
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
@@ -363,16 +359,34 @@ export default function App() {
           onDragLeave={onDragLeaveTextarea}
         />
         <div className="hint">
-          Tip: sleep tekst van eender waar hier binnen. Tekst aanpassen past
-          automatisch de grids aan.
+          <b>Tip:</b> sleep tekst van eender waar hier binnen. Tekst aanpassen
+          past automatisch de grids aan.
         </div>
         <div className="hint">
-          Typing rhythms (EXPERIMENTAL) (type number it is replaced when you
-          leave the typing field): 1 = 𝅝 = whole note 2 = 𝅗𝅥 = half note 4 = ♩ =
-          quarter note 8 = ♪ = eighth note 16 = 𝅘𝅥𝅯 = sixteenth note 32 = 𝅘𝅥𝅰 =
-          thirty-second note 1 = 𝄻 = whole rest 2 = 𝄼 = half rest 4 = 𝄽 =
-          quarter rest 8 = 𝄾 = eighth rest 16 = 𝄿 = sixteenth rest Type multiple
-          notes with spaces between or with | between
+          <b>Typen ritme (NOG EXPERIMENTEEL): </b> in de lijn voor ritme typ
+          getallen met spaties tussen of | tussen. Deze worden noten wanneer je
+          text input veld verlaat.
+          <button
+            id="show-hint-rhythm"
+            onClick={() =>
+              document
+                .getElementById("hint-rhythm")
+                ?.classList.toggle("collapsed")
+            }
+          >
+            ?
+          </button>
+          <div id="hint-rhythm" className="hint collapsed">
+            <ul>
+              <li>1 = 𝅝 = whole note </li>
+              <li>2 = 𝅗𝅥 = half note</li>
+              <li>4 = ♩ = quarter note</li>
+              <li>8 = ♪ = eighth note</li>
+              <li>16 = 𝅘𝅥𝅯 = sixteenth note</li>
+              <li>32 = 𝅘𝅥𝅰 = thirty-second note</li>
+            </ul>
+            {/* 1 = 𝄻 = whole rest 2 = 𝄼 = half rest 4 = 𝄽 = quarter rest 8 = 𝄾 = eighth rest 16 = 𝄿 = sixteenth rest Type multiple */}
+          </div>
         </div>
       </section>
 
@@ -381,36 +395,49 @@ export default function App() {
           <h2>Preview</h2>
 
           <div className="legend">
-            <span className="pill">Click = RIGHT border</span>
-            <span className="pill">Shift+Click = LEFT border</span>
+            <span
+              className="pill"
+              title="Klikken in een text cel: blauwe LIJN RECHTS aan/uit"
+            >
+              Click = LIJN RECHTS aan/uit
+            </span>
+            <span
+              className="pill"
+              title="Shift+klikken in een text cel: groene LIJN LINKS aan/uit"
+            >
+              Shift+Click = LIJN LINKS aan/uit
+            </span>
           </div>
 
           <div className="toggles">
-            <label className="toggle">
+            <label
+              className="toggle"
+              title="lijn met akkoorden tonen/verbergen"
+            >
               <input
                 type="checkbox"
                 checked={showChords}
                 onChange={(e) => setShowChords(e.target.checked)}
               />
-              Chords
+              Akkoorden
             </label>
 
-            <label className="toggle">
+            <label className="toggle" title="lijn met ritme tonen/verbergen">
               <input
                 type="checkbox"
                 checked={showRhythm}
                 onChange={(e) => setShowRhythm(e.target.checked)}
               />
-              Rhythm
+              Ritme
             </label>
 
-            <label className="toggle">
+            <label className="toggle" title="lijn met notas tonen/verbergen">
               <input
                 type="checkbox"
                 checked={showNotes}
                 onChange={(e) => setShowNotes(e.target.checked)}
               />
-              Notes
+              Notas
             </label>
           </div>
         </div>

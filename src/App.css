@@ -78,6 +78,7 @@ body,
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 16px;
+  padding-top: 16px;
 }
 
 .header h1 {
@@ -137,6 +138,23 @@ body,
   margin-top: 8px;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.hint.collapsed {
+  display: none;
+}
+
+#show-hint-rhythm {
+  margin-left: 10px;
+  background-color: var(--accent);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+}
+
+#show-hint-rhythm:hover {
+  background-color: var(--accent-2);
 }
 
 /* SECTION: TEXTAREA */
